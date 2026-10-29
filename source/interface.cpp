@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////
-// C++ code generated with wxFormBuilder (version 3.10.1-0-g8feb16b)
+// C++ code generated with wxFormBuilder (version 3.10.1-0-g8feb16b3)
 // http://www.wxformbuilder.org/
 //
 // PLEASE DO *NOT* EDIT THIS FILE!
@@ -124,12 +124,12 @@ MainFrame::MainFrame( wxWindow* parent, wxWindowID id, const wxString& title, co
 
 	bSizer5->Add( removeInstallBtn, 0, wxALL|wxEXPAND, 5 );
 
-	activateProPlusBtn = new wxButton( installs_pane, ACTIV_PROPLUS, wxT("Activate (Plus/Pro)"), wxDefaultPosition, wxDefaultSize, 0 );
+	activateProPlusBtn = new wxButton( installs_pane, ACTIV_PROPLUS, wxT("Activate (Serial #)"), wxDefaultPosition, wxDefaultSize, 0 );
 	activateProPlusBtn->Enable( false );
 
 	bSizer5->Add( activateProPlusBtn, 0, wxALL|wxEXPAND, 5 );
 
-	activatePersonalBtn = new wxButton( installs_pane, ACTIV_PERSONAL, wxT("Activate (Personal)"), wxDefaultPosition, wxDefaultSize, 0 );
+	activatePersonalBtn = new wxButton( installs_pane, ACTIV_PERSONAL, wxT("Activate (Web)"), wxDefaultPosition, wxDefaultSize, 0 );
 	activatePersonalBtn->Enable( false );
 
 	bSizer5->Add( activatePersonalBtn, 0, wxALL|wxEXPAND, 5 );
@@ -371,6 +371,12 @@ OpenWithEditorDlgBase::OpenWithEditorDlgBase( wxWindow* parent, wxWindowID id, c
 	editorsListBox = new wxListBox( this, VERSIONS_LIST, wxDefaultPosition, wxDefaultSize, 0, NULL, wxLB_NEEDED_SB|wxLB_SINGLE );
 	openWithSizer->Add( editorsListBox, wxGBPosition( 1, 0 ), wxGBSpan( 1, 3 ), wxALL|wxEXPAND, 5 );
 
+	wxString platformChooserChoices[] = { wxT("Current Platform"), wxT("Windows"), wxT("macOS"), wxT("Linux"), wxT("iOS"), wxT("Android"), wxT("WebGL"), wxT("UWP") };
+	int platformChooserNChoices = sizeof( platformChooserChoices ) / sizeof( wxString );
+	platformChooser = new wxChoice( this, wxID_ANY, wxDefaultPosition, wxDefaultSize, platformChooserNChoices, platformChooserChoices, 0 );
+	platformChooser->SetSelection( 0 );
+	openWithSizer->Add( platformChooser, wxGBPosition( 2, 2 ), wxGBSpan( 1, 1 ), wxALL|wxALIGN_RIGHT, 5 );
+
 	wxBoxSizer* dialogSizer;
 	dialogSizer = new wxBoxSizer( wxHORIZONTAL );
 
@@ -384,7 +390,7 @@ OpenWithEditorDlgBase::OpenWithEditorDlgBase( wxWindow* parent, wxWindowID id, c
 	dialogSizer->Add( openBtn, 0, wxALL, 5 );
 
 
-	openWithSizer->Add( dialogSizer, wxGBPosition( 2, 2 ), wxGBSpan( 1, 1 ), wxEXPAND, 5 );
+	openWithSizer->Add( dialogSizer, wxGBPosition( 3, 2 ), wxGBSpan( 1, 1 ), wxEXPAND, 5 );
 
 
 	openWithSizer->AddGrowableCol( 0 );

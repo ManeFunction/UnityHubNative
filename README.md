@@ -1,8 +1,8 @@
 # Unity Hub Native
 
-UnityHubNative is a lightweight C++ / wxWidgets alternative to the unnecessarily heavy official Unity Hub, built using [wxWidgets](https://wxwidgets.org/). This means that, instead of using heavy web components like the official Electron hub, it uses native GUI components on all platforms.
+UnityHubNative is a lightweight C++ / wxWidgets alternative to the unnecessarily heavy official Unity Hub, built using [wxWidgets](https://wxwidgets.org/). It uses native widgets on all platforms instead of heavy web components like the official Electron hub.
 
-It launches many times faster, uses far less memory and CPU, and is a fraction of the total size of the offical Unity Hub.
+UnityHubNative launches many times faster, uses far less memory and CPU, and is a fraction of the total size of the official Unity Hub.
 
 <img width="912" alt="image" src="https://user-images.githubusercontent.com/22283943/193929653-a4aad2b6-229b-4438-afee-c30a7ae39949.png">
 
@@ -18,12 +18,12 @@ It launches many times faster, uses far less memory and CPU, and is a fraction o
 - Manage Unity licenses
 - Update projects to a Unity version of your choosing
 
-UnityHubNative does not have every feature that the official hub has, but it has most of them. UnityHubNative serves as a shortcut to get into your projects faster. 
+UnityHubNative does not have every feature that the official hub has, but it has most of the commonly-needed features. UnityHubNative serves as a shortcut to get into your projects faster. 
 
 ## Installation
 This application is self-contained.
 1. Open the [Releases](https://github.com/Ravbug/UnityHubNative/releases) section, and download the version for your platform.
-2. Place the executable anywhere. (Recommended `/Applications` on Mac, `C:\Program Files` on Windows, and `/usr/bin` on Linux)
+2. Place the executable anywhere. (Recommended `/Applications` on Mac, `C:\Program Files` on Windows, and `/opt` on Linux)
 3. Double click to run
 
 ## Application data files

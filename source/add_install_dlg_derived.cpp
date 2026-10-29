@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <sstream>
 #include <fstream>
-#include <fmt/format.h>
+#include <format>
 
 using namespace std;
 #define UPDATEEVT 2004
@@ -52,6 +52,8 @@ void AddNewInstallDlg::PopulateTable(wxCommandEvent&){
     installSearchSizer->Layout();
 }
 
+#define TRYCATCH 1
+
 
 void AddNewInstallDlg::GetAllVersions(){
 #ifndef __linux__
@@ -59,7 +61,10 @@ void AddNewInstallDlg::GetAllVersions(){
     // version date info
     unordered_map<string,string> versionDates;
     {
-		try{
+#if TRYCATCH
+		try
+#endif
+        {
 			auto r = fetch("https://symbolserver.unity3d.com/000Admin/history.txt");
 			if (r.code != 200){
 				wxMessageBox("Unable to access Unity version metadata", "Download error", wxOK | wxICON_ERROR);
@@ -102,15 +107,19 @@ void AddNewInstallDlg::GetAllVersions(){
 							if (strncmp(r.text.data() + i, match.data(), match.size()) == 0){
 								// we have found a version, extract its data
 								auto begin = i + match.size();
-								auto end = r.text.find_first_of("\"", i + match.size());
+								auto end = std::min(r.text.find_first_of("\"", i + match.size()), r.text.find_first_of("\\", i + match.size()));
 								std::string_view versiondata(r.text.data() + begin,end-begin);
 								
 								// get the version and hashcode
 								auto slashpos = versiondata.find_first_of("/");
+                                if (slashpos == versiondata.npos){
+                                    continue;
+                                }
 								
 								auto version = string(string_view(versiondata.data(),slashpos));
 								if (versionDates.find(version) != versionDates.end()){
-									versions.emplace_back(version,string(string_view(versiondata.data() + slashpos + 1, versiondata.size() - slashpos - 1)), versionDates.at(version));
+                                    auto hashcode = string(string_view(versiondata.data() + slashpos + 1, versiondata.size() - slashpos - 1));
+									versions.emplace_back(version,hashcode, versionDates.at(version));
 								}
 							}
 						}
@@ -122,9 +131,11 @@ void AddNewInstallDlg::GetAllVersions(){
 				}
 			}
 		}
+#if TRYCATCH
 		catch(std::exception& e){
-			wxMessageBox(fmt::format("Network error: {}", e.what()), "Error", wxOK | wxICON_ERROR);
+			wxMessageBox(std::format("Network error: {}", e.what()), "Error", wxOK | wxICON_ERROR);
 		}
+#endif
     }
 #endif
 }
@@ -188,16 +199,16 @@ void AddNewInstallDlg::InstallSelected(wxCommandEvent&){
                 #endif
                 
                 // write the file to temp location
-                auto outpath = fmt::format("{}{}{}.{}", cachedir.string(), "UnityDownloadAssistant", data.hashcode, installerExt);
+                auto outpath = std::format("{}{}{}.{}", cachedir.string(), "UnityDownloadAssistant", data.hashcode, installerExt);
                 ofstream outfile(outpath, std::ios::binary);
                 outfile.write(r.text.c_str(),r.text.size());
                 
                 // open the file
                 wxCommandEvent lnevt(executeEvt);
 #ifdef __APPLE__
-                lnevt.SetString(fmt::format("open \"{}\"", outpath));
+                lnevt.SetString(std::format("open \"{}\"", outpath));
 #elif defined _WIN32
-                lnevt.SetString(fmt::format("\"{}\"", outpath));
+                lnevt.SetString(std::format("\"{}\"", outpath));
 #endif
                 lnevt.SetId(EXECUTEEVT);
                 wxPostEvent(this,lnevt);
@@ -221,7 +232,7 @@ void AddNewInstallDlg::InstallSelectedWithHub(wxCommandEvent &){
     auto item = versionsListCtrl->GetSelection();
     auto data = *(reinterpret_cast<version*>(versionsListCtrl->GetItemData(item)));
     
-    auto url = fmt::format("unityhub://{}/{}", data.name,data.hashcode);
+    auto url = std::format("unityhub://{}/{}", data.name,data.hashcode);
     
     wxLaunchDefaultBrowser(url);
 }

@@ -1,12 +1,45 @@
 #include "globals.h"
-#include <fmt/format.h>
+#include <format>
 #include <wx/listctrl.h>
 #include <wx/msgdlg.h>
+#if __APPLE__
+#include "AppleUtilities.h"
+#elif _WIN32
+#include <ShlObj_core.h>
+#endif
+#include <cstdio>
+
+ParsedVersion parseVersion(const std::string_view version) {
+    int major, minor, patch, build;
+    if (sscanf(version.data(), "%d.%d.%d%*c%d", &major, &minor, &patch, &build) == 4) {
+        return {
+            major,
+            minor,
+            patch,
+            build
+        };
+    };
+    // parse error, assume all 0s.
+    return {};
+}
+
+
+std::string project::modifyDateString() const {
+	if (modifiedDate == std::numeric_limits<decltype(modifiedDate)>::min()) {
+		return "???";
+	}
+#if _WIN32
+    long 
+#endif
+	long
+		reducedTime = modifiedDate;    //NOTE: 32-bit time precision loss on non-windows
+    return ctime(&reducedTime);
+}
 
 void launch_process(const std::string& command, int flags) {
 #if defined __APPLE__ || defined __linux__
     //the '&' runs the command nonblocking, and >/dev/null 2>&1 destroys output
-    auto fullcmd = fmt::format("{}{} &", command,null_device);
+    auto fullcmd = std::format("{}{} &", command,null_device);
     FILE* stream = popen(fullcmd.c_str(), "r");
     pclose(stream);
 
@@ -19,22 +52,32 @@ void launch_process(const std::string& command, int flags) {
 
 void reveal_in_explorer(const std::filesystem::path& path) {
 #if defined __APPLE__
-	std::string command = "open \"" + path.string() + "\"";
-
-#elif defined __linux__
-	std::string command = "xdg-open \"" + path.string() + "\"";
-
-#elif defined _WIN32
-	//do not surround the paths in quotes, it will not work
-	std::string command = "\\Windows\\explorer.exe \"" + path.string() + "\"";
-#endif
+    RevealFile(path);
+#else
 	if (std::filesystem::exists(path)) {
+#if defined __linux__
+		std::string command = "xdg-open \"" + path.string() + "\"";
 		launch_process(command);
+#elif defined _WIN32
+		PIDLIST_ABSOLUTE pidl; 
+		SFGAOF attributes; 
+		HRESULT hr = SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, &attributes);
+		if (SUCCEEDED(hr)) {
+			if (pidl) {
+				LPITEMIDLIST pidlItem = ILFindLastID(pidl);
+				HRESULT hr2 = SHOpenFolderAndSelectItems(pidl, 1, const_cast<LPCITEMIDLIST*>(&pidlItem), 0);
+				ILFree(pidl);
+				if (FAILED(hr2)) {
+						
+				}
+			}
+		}
+#endif
 	}
 	else {
-		wxMessageBox("The project at " + path.string() + " could not be found.", "Cannot Reveal Project", wxOK | wxICON_ERROR);
+		wxMessageBox("The item at " + path.string() + " could not be found.", "Cannot Reveal Item", wxOK | wxICON_ERROR);
 	}
-
+#endif
 }
 
 long wxListCtrl_get_selected(wxListCtrl* listCtrl) {
@@ -79,3 +122,4 @@ void dpi_scale(wxWindow* window){
 	//set the minimum size
 	window->SetSizeHints(wxSize(minw, minh));
 }
+

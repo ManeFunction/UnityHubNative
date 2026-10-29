@@ -21,19 +21,30 @@
 #include "wxlin.xpm"
 #endif
 
+enum class TargetPlatform : uint8_t {
+	CurrentPlatform,
+	Windows,
+	macOS,
+	Linux,
+	iOS,
+	Android,
+	WebGL,
+	UWP
+};
+
 class MainFrameDerived : public MainFrame{
 public:
 	//constructor (takes no args)
 	MainFrameDerived();
-	
+	virtual ~MainFrameDerived();
 	static std::string GetPathFromDialog(const std::string& message);
 	
 private:
-	void AddProject(const project& p, const std::string& filter, bool select=false);
+	void AddProject(const project& p, const std::string& filter, bool select=false, bool save=false);
 	project LoadProject(const std::filesystem::path& path);
 	void SaveProjects();
 	void OpenProject(const long& index);
-	void OpenProject(const project& p, const editor& e);
+	void OpenProject(const project& p, const editor& e, TargetPlatform plat = TargetPlatform::CurrentPlatform);
 	void SaveEditorVersions();
 	void LoadEditorPath(const std::filesystem::path& path);
 	void LoadEditorVersions();
@@ -77,6 +88,10 @@ private:
 	std::deque<project> projects;
 	std::vector<std::filesystem::path> installPaths;
 	std::vector<editor> editors;
+
+	// Sorting state
+	int sortColumn = 0;  // Default sort by name (column 0)
+	bool sortAscending = true;  // Default ascending
 	
 	//window events
 	void OnAbout(wxCommandEvent& event);
@@ -99,8 +114,10 @@ private:
 	void OnRemoveProject(wxCommandEvent& event){
 		long itemIndex = wxListCtrl_get_selected(projectsList);
 		if (itemIndex > -1){
+			// Get the project index from item data
+			long projectIndex = projectsList->GetItemData(itemIndex);
 			//remove from the vector
-			projects.erase(projects.begin()+itemIndex);
+			projects.erase(projects.begin()+projectIndex);
 			//remove from the list view
 			projectsList->DeleteItem(itemIndex);
 			//update the file
@@ -114,7 +131,8 @@ private:
 	Called when you double click or press Enter on a cell in the ListView
 	*/
 	void OnOpenProject(wxListEvent& event){
-		OpenProject(event.m_itemIndex);
+		long projectIndex = projectsList->GetItemData(event.m_itemIndex);
+		OpenProject(projectIndex);
 	}
 	/**
 	Locates a Unity install path and adds it to the list and UI
@@ -135,7 +153,7 @@ private:
 		int id = installsList->GetSelection();
 		if (id != wxNOT_FOUND){
 			editor& e = editors[id];
-			std::filesystem::path path = e.path / e.name;
+			std::filesystem::path path = e.path;
             if (!std::filesystem::exists(path)){
                 reveal_in_explorer(e.path);
             }
@@ -158,6 +176,9 @@ private:
 	void OnReloadEditors(wxCommandEvent& event){
 		this->LoadEditorVersions();
 	}
+	void OnColumnClick(wxListEvent& event);
+	static int wxCALLBACK CompareItems(wxIntPtr item1, wxIntPtr item2, wxIntPtr sortData);
+	void SortProjects();
 	wxDECLARE_EVENT_TABLE();
 };
 
@@ -192,7 +213,7 @@ private:
 	wxDECLARE_EVENT_TABLE();
 };
 
-typedef std::function<void(const project&, const editor&)> OpenWithCallback;
+typedef std::function<void(const project&, const editor&, TargetPlatform platform)> OpenWithCallback;
 class OpenWithDlg : public OpenWithEditorDlgBase{
 public:
 	OpenWithDlg(wxWindow* parent, const project& project, const std::vector<editor>& versions,  const OpenWithCallback& callback);

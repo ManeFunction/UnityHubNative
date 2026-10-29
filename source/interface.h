@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////
-// C++ code generated with wxFormBuilder (version 3.10.1-0-g8feb16b)
+// C++ code generated with wxFormBuilder (version 3.10.1-0-g8feb16b3)
 // http://www.wxformbuilder.org/
 //
 // PLEASE DO *NOT* EDIT THIS FILE!
@@ -106,7 +106,7 @@ class PersonalActivationDlgBase : public wxDialog
 
 	public:
 
-		PersonalActivationDlgBase( wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = wxT("Personal License Manual Activation"), const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxDefaultSize, long style = wxDEFAULT_DIALOG_STYLE );
+		PersonalActivationDlgBase( wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = wxT("Activate License via Webpage"), const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxDefaultSize, long style = wxDEFAULT_DIALOG_STYLE );
 
 		~PersonalActivationDlgBase();
 
@@ -143,6 +143,7 @@ class OpenWithEditorDlgBase : public wxDialog
 	protected:
 		wxStaticText* openWithLabel;
 		wxListBox* editorsListBox;
+		wxChoice* platformChooser;
 		wxButton* openBtn;
 
 	public:
@@ -196,7 +197,7 @@ class PlusProActivationDlgBase : public wxDialog
 
 	public:
 
-		PlusProActivationDlgBase( wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = wxT("Activate Plus/Pro License"), const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxDefaultSize, long style = wxDEFAULT_DIALOG_STYLE|wxRESIZE_BORDER );
+		PlusProActivationDlgBase( wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = wxT("Activate License with Serial #"), const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxDefaultSize, long style = wxDEFAULT_DIALOG_STYLE|wxRESIZE_BORDER );
 
 		~PlusProActivationDlgBase();
 

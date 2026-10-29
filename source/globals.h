@@ -14,7 +14,7 @@
 static constexpr std::string_view projectsFile = "projects.txt";
 static constexpr std::string_view editorPathsFile = "editorPaths.txt";
 static constexpr std::string_view templatePrefix = "com.unity.template";
-static constexpr std::string_view AppVersion = "v1.53";
+static constexpr std::string_view AppVersion = "v1.59";
 
 struct wxListCtrl;
 struct wxWindow;
@@ -29,11 +29,11 @@ struct wxWindow;
 	static constexpr std::string_view installerExt = "dmg";
 
 	//where to find various Unity things on macOS
-	static const std::filesystem::path executable = "Unity.app/Contents/MacOS/Unity";
+	static const std::filesystem::path executable = "Contents/MacOS/Unity";
     static const std::vector<std::filesystem::path> defaultInstall = {"/Applications/Unity/Hub/Editor","/Applications/Unity/"};
 	//TODO: make this a preference?
 	static const std::filesystem::path hubDefault = "/Applications/Unity Hub.app";
-	static const std::filesystem::path templatesDir = "Unity.app/Contents/Resources/PackageManager/ProjectTemplates/";
+	static const std::filesystem::path templatesDir = "Contents/Resources/PackageManager/ProjectTemplates/";
 
 	//for stream redirecting to dev/null
 	static constexpr std::string_view null_device = ">/dev/null 2>&1";
@@ -54,9 +54,9 @@ struct wxWindow;
 
 	//where to find various Unity things on windows
 	static const std::filesystem::path executable = "Editor\\Unity.exe";
-    static const std::vector<std::filesystem::path> defaultInstall = {"\\Program Files\\Unity\\Hub\\Editor"};
+    static const std::vector<std::filesystem::path> defaultInstall = { homedrive / "\\Program Files\\Unity\\Hub\\Editor"};
 	
-	static const std::filesystem::path hubDefault = "\\Program Files\\Unity Hub\\Unity Hub.exe";
+	static const std::filesystem::path hubDefault = homedrive / "\\Program Files\\Unity Hub\\Unity Hub.exe";
 	static const std::filesystem::path templatesDir = "Editor\\Data\\Resources\\PackageManager\\ProjectTemplates\\";
 
 	/**
@@ -117,8 +117,12 @@ struct editor {
 	std::string name;
 	std::filesystem::path path;
 	decltype(path) executablePath() const {
-		return path / name / executable;
+		return path / executable;
 	}
+    
+    auto templatePath() const{
+        return path / templatesDir;
+    }
 
 	bool operator==(const editor& other) {
 		return this->name == other.name;    // many editors can share a root path
@@ -129,9 +133,16 @@ struct editor {
 struct project {
 	std::string name;
 	std::string version;
-	std::string modifiedDate;
+	int64_t modifiedDate;
 	std::filesystem::path path;
 	bool operator==(const project& other) const {
 		return this->path == other.path;
 	}
+    std::string modifyDateString() const;
 };
+
+struct ParsedVersion {
+    int major = 0, minor = 0, patch = 0, build = 0;
+};
+
+ParsedVersion parseVersion(const std::string_view version);

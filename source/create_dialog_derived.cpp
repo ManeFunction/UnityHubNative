@@ -5,13 +5,10 @@
 //
 
 #include "interface_derived.hpp"
-#if defined _WIN32 
-#include "dirent.h" 
-#else
-#include <dirent.h>
-#endif
+#include <filesystem>
 #include <wx/msgdlg.h>
-#include <fmt/format.h>
+#include <format>
+#include <wx/choicdlg.h>
 
 using namespace std;
 
@@ -69,13 +66,28 @@ void CreateProjectDialogD::OnCreate(wxCommandEvent& event){
 	//validate form
 	string message = validateForm();
 	if (message == ""){
+        
+        
 		//assemble the command that will create the project described by the dialog
         
 		editor& e = editors[GetSelectedEditorIndex()];
-		auto executablePath = e.path / e.name / executable;
-		auto executableTemplatesPath = e.path / e.name / templatesDir;
+        auto executablePath = e.executablePath();
+        auto executableTemplatesPath = e.templatePath();
 		string projName = projNameTxt->GetValue().ToStdString();
 		string projPath = projLocTxt->GetValue().ToStdString();
+        
+        auto outPath = filesystem::path(projPath) / projName;
+        
+        // extra check: ensure that the location to write the project doesn't already have a project
+        {
+            auto projectversionpath = outPath / "ProjectSettings" / "ProjectVersion.txt";
+            if (std::filesystem::exists(projectversionpath)){
+                auto answer = wxMessageBox(std::format("A Unity project already exists at {}. Overwrite it?", outPath.string()),"Project Already Exists",  wxYES_NO);
+                if (answer != wxYES){
+                    return;
+                }
+            }
+        }
 		
 		//get the selected template
 		long itemIndex = wxListCtrl_get_selected(templateCtrl);
@@ -86,22 +98,22 @@ void CreateProjectDialogD::OnCreate(wxCommandEvent& event){
 		
 		//create the command string
 		#if defined __APPLE__
-        string command = fmt::format("\"{}\" -createProject \"{}\" -cloneFromTemplate \"{}{}.{}\"",
+        string command = std::format("\"{}\" -createProject \"{}\" -cloneFromTemplate \"{}{}.{}\"",
                                      executablePath.string(),
-                                     (filesystem::path(projPath) / projName).string(),
+                                     outPath.string(),
                                      executableTemplatesPath.string(),
                                      templatePrefix,
                                      templateName
                                      );
 		#elif defined _WIN32
 			auto fullProj = filesystem::path(projPath) / projName;
-			auto fullTemplate = executableTemplatesPath / fmt::format("{}.{}",templatePrefix,templateName);
-			string command = fmt::format("\"{}\" -createproject {} -cloneFromTemplate \"{}\"",
+			auto fullTemplate = executableTemplatesPath / std::format("{}.{}",templatePrefix,templateName);
+			string command = std::format("\"{}\" -createproject \"{}\" -cloneFromTemplate \"{}\"",
 				executablePath.string(),
 				fullProj.string(),
 				fullTemplate.string());
 		#elif defined __linux__
-			string command = fmt::format("\"{}\"  -createproject \"{}\" -cloneFromTemplate \"{}{}.{}\"",
+			string command = std::format("\"{}\"  -createproject \"{}\" -cloneFromTemplate \"{}{}.{}\"",
 				executablePath.string(),
 				(filesystem::path(projPath) / projName).string(),
 				executableTemplatesPath.string(),
@@ -110,7 +122,7 @@ void CreateProjectDialogD::OnCreate(wxCommandEvent& event){
 			);
 		#endif
 		//TODO: return this command to what summoned this dialog
-		project p = {projName,e.name,"",filesystem::path(projPath) / filesystem::path(projName)};
+		project p = {projName,e.name,0,filesystem::path(projPath) / filesystem::path(projName)};
 		this->callback(command,p);
 		
 		//close and dispose self
@@ -156,28 +168,21 @@ void CreateProjectDialogD::loadTemplates(const editor& e){
 	templateCtrl->ClearAll();
 	
 	//open the folder
-	auto templatesFolder = e.path /e.name / templatesDir;
-	DIR* dir = opendir(templatesFolder.string().c_str());
-	struct dirent *entry = readdir(dir);
-	//loop over the contents
-	while (entry != NULL)
-	{
-		//does the file start with the correct prefix?
-		if (string(entry->d_name).rfind(templatePrefix,0)==0){
-			//add it to the UI
-			wxListItem i;
-			i.SetId(0);
-			string label = entry->d_name;
-			i.SetText(label.substr(templatePrefix.length()+1));
-			
-			templateCtrl->InsertItem(i);
-		}
-		//advance to next item in folder
-		entry = readdir(dir);
-	}
-	//free resources
-	closedir(dir);
-	free(entry);
+	auto templatesFolder = e.templatePath();
+    
+    for(const auto& entry : std::filesystem::directory_iterator{templatesFolder}){
+        //does the file start with the correct prefix?
+        auto path = entry.path();
+        if (path.filename().string().rfind(templatePrefix,0)==0){
+            //add it to the UI
+            wxListItem i;
+            i.SetId(0);
+            string label = path.filename().string();
+            i.SetText(label.substr(templatePrefix.length()+1));
+            
+            templateCtrl->InsertItem(i);
+        }
+    }
 }
 
 void CreateProjectDialogD::OnChoiceChanged(wxCommandEvent& event){

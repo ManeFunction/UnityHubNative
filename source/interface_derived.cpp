@@ -18,9 +18,8 @@
 #include <dirent.h>
 #endif
 
-#include <fmt/format.h>
+#include <format>
 
-#include <fmt/format.h>
 #include <filesystem>
 #if __APPLE__
 #include "AppleUtilities.h"
@@ -37,6 +36,10 @@ using namespace std::filesystem;
 #define SETTING_POSITION_Y "POSITION_Y"
 //the web view unloads after 5 minutes of page hidden
 const int TIMER_LENGTH = 5 * 1000 * 60;
+
+constexpr std::string_view config_name = "com.ravbug.unityhubnative.config";
+constexpr std::string_view config_sortCol = "sortColIndex";
+constexpr std::string_view config_sortAscending = "sortAscending";
 
 //Declare events here
 wxBEGIN_EVENT_TABLE(MainFrameDerived, wxFrame)
@@ -67,6 +70,7 @@ EVT_LIST_ITEM_ACTIVATED(wxID_HARDDISK, MainFrameDerived::OnOpenProject)
 EVT_LIST_ITEM_SELECTED(wxID_HARDDISK, MainFrameDerived::OnSelectProject)
 EVT_LIST_ITEM_DESELECTED(wxID_HARDDISK, MainFrameDerived::OnDeselectProject)
 EVT_LIST_DELETE_ITEM(wxID_HARDDISK,  MainFrameDerived::OnDeselectProject)
+EVT_LIST_COL_CLICK(wxID_HARDDISK, MainFrameDerived::OnColumnClick)
 
 EVT_LISTBOX(wxID_FLOPPY, MainFrameDerived::OnSelectEditor)
 EVT_LISTBOX(wxID_HOME, MainFrameDerived::OnSelectEditorPath)
@@ -88,6 +92,12 @@ MainFrameDerived::MainFrameDerived() : MainFrame(NULL){
         this->SetSize(x, y, width, height);
     }
     delete config;
+
+    // load prefs
+    wxConfig config(config_name.data());
+    sortColumn = std::clamp<long>(config.ReadLong(config_sortCol.data(), 0), 0, 3);
+    sortAscending = config.ReadBool(config_sortAscending.data(), false);
+
 	//set up project list columns
 	{
 		string cols[] = {"Project Name","Unity Version","Last Modified","Path"};
@@ -102,7 +112,9 @@ MainFrameDerived::MainFrameDerived() : MainFrame(NULL){
 	#elif defined _WIN32
 		int status = mkdir(datapath.string().c_str());
 		//on windows also make the main window background white
-		this->SetBackgroundColour(*wxWHITE);
+        if (!wxSystemSettings::GetAppearance().IsDark()) {
+            this->SetBackgroundColour(*wxWHITE);
+        }
 		//high DPI scaling fixes
 		dpi_scale(this);
 		//set reveal label
@@ -111,14 +123,11 @@ MainFrameDerived::MainFrameDerived() : MainFrame(NULL){
 	if (status != 0){
 		ReloadData();
 	}
-	#if defined __linux__
-	launchHubBtn->Hide();
-	#endif
-	
+
 	//if no projects to load, the interface will be blank
 
 	//show current version in titlebar
-	this->SetLabel(fmt::format("Unity Hub Native {}",AppVersion));
+	this->SetLabel(std::format("Unity Hub Native {}",AppVersion));
     projSearchCtrl->Bind(wxEVT_KEY_UP, &MainFrameDerived::Filter, this);
 	projSearchCtrl->SetFocus();
 }
@@ -182,6 +191,11 @@ void MainFrameDerived::OnSelectEditorPath(wxCommandEvent&){
     }
 }
 
+void MainFrameDerived::OnQuit(wxCommandEvent&)
+{
+    Close();
+}
+
 /**
  Loads the data in the main view. If anything is currently loaded, it will be cleared and re-loaded
  */
@@ -202,7 +216,10 @@ void MainFrameDerived::ReloadData(){
 	editors.clear();
 	
     LoadProjects("");
-	
+
+	// Sort projects after loading (default: by name ascending)
+	SortProjects();
+
 	//check that the installs path file exists in the folder
 	auto p = datapath / editorPathsFile;
 	if (filesystem::exists(p)){
@@ -240,22 +257,50 @@ void MainFrameDerived::LoadProjects(const std::string &filter){
     }
 }
 
-void MainFrameDerived::Filter(wxKeyEvent &){
+void MainFrameDerived::Filter(wxKeyEvent &event){
+    //focus on the table
+    if (projectsList->GetItemCount() > 0){
+        if (event.GetKeyCode() == wxKeyCode::WXK_DOWN){
+            projectsList->SetFocus();
+            projectsList->SetItemState(0, wxLIST_STATE_FOCUSED | wxLIST_STATE_SELECTED, wxLIST_STATE_FOCUSED | wxLIST_STATE_SELECTED);
+            return;
+        }
+        if (event.GetKeyCode() == wxKeyCode::WXK_UP){
+            projectsList->SetFocus();
+            projectsList->SetItemState(projectsList->GetItemCount() - 1, wxLIST_STATE_FOCUSED | wxLIST_STATE_SELECTED, wxLIST_STATE_FOCUSED | wxLIST_STATE_SELECTED);
+            return;
+        }
+        //straight up select the open the first project on ENTER
+        if (event.GetKeyCode() == wxKeyCode::WXK_RETURN){
+            //select first item first
+            projectsList->SetFocus();
+            projectsList->SetItemState(0, wxLIST_STATE_FOCUSED | wxLIST_STATE_SELECTED, wxLIST_STATE_FOCUSED | wxLIST_STATE_SELECTED);
+
+            //open first item
+            long projectIndex = projectsList->GetItemData(0);
+            OpenProject(projectIndex);
+            return;
+        }
+    }
     projectsList->DeleteAllItems();
     wxListEvent e;
     OnDeselectProject(e);
     projects.clear();
-    auto filter = projSearchCtrl->GetValue();
+    auto filter = projSearchCtrl->GetValue().ToStdString();
     transform(filter.begin(), filter.end(), filter.begin(), ::tolower);
     LoadProjects(filter);
+    // Re-apply sorting after filtering
+    SortProjects();
 }
+
+#define BUILD_YEAR  (__DATE__ + 7)
 
 //definitions for the events
 void MainFrameDerived::OnAbout(wxCommandEvent& event)
 {
 	wxAboutDialogInfo aboutInfo;
 	aboutInfo.SetName("Unity Hub Native");	
-	aboutInfo.SetCopyright("(C) Ravbug 2023");
+	aboutInfo.SetCopyright(std::format("(C) Ravbug 2019-{}",BUILD_YEAR));
 	aboutInfo.SetDescription("Developed with wxWidgets in C++");
 #if defined __linux__
 	aboutInfo.SetWebSite("https://github.com/ravbug/UnityHubNative");
@@ -286,7 +331,7 @@ void MainFrameDerived::OnAddProject(wxCommandEvent& event){
             //check that the project does not already exist
             for(project& p : projects){
                 if (p.path == path){
-                    wxMessageBox( fmt::format("Project \"{}\" has already been added.", p.path.string()), "Cannot add project", wxOK | wxICON_WARNING );
+                    wxMessageBox( std::format("Project \"{}\" has already been added.", p.path.string()), "Cannot add project", wxOK | wxICON_WARNING );
                     return;
                 }
             }
@@ -294,7 +339,7 @@ void MainFrameDerived::OnAddProject(wxCommandEvent& event){
             //add it to the projects list
             try{
                 project p = LoadProject(path);
-                AddProject(p,"",true);
+                AddProject(p,"",true,true);
             }
             catch(runtime_error& e){
                 wxMessageBox(e.what(),"Unable to add project",wxOK | wxICON_ERROR);
@@ -357,7 +402,7 @@ void MainFrameDerived::OnCreateProject(wxCommandEvent& event){
 	if (editors.size() > 0){
 		DialogCallback d = [&](string str, project p){
 			//add the project
-			this->AddProject(p,"",true);
+			this->AddProject(p,"",true, true);
 			
 			//launch the process
 			launch_process(str);
@@ -376,7 +421,8 @@ void MainFrameDerived::OnCreateProject(wxCommandEvent& event){
 void MainFrameDerived::OnRevealProject(wxCommandEvent& event){
 	long selectedIndex = wxListCtrl_get_selected(projectsList);
 	if (selectedIndex > -1){
-		project& p = projects[selectedIndex];
+		long projectIndex = projectsList->GetItemData(selectedIndex);
+		project& p = projects[projectIndex];
 		reveal_in_explorer(p.path);
 	}
 }
@@ -387,12 +433,13 @@ void MainFrameDerived::OnRevealProject(wxCommandEvent& event){
 void MainFrameDerived::OnOpenWith(wxCommandEvent& event){
 	long selectedIndex = wxListCtrl_get_selected(projectsList);
 	if (selectedIndex > -1){
-		project& p = projects[selectedIndex];
-		OpenWithCallback c = [&](project p, editor e){
+		long projectIndex = projectsList->GetItemData(selectedIndex);
+		project& p = projects[projectIndex];
+		OpenWithCallback c = [&](project p, editor e, TargetPlatform plat){
 			//open the project
-			OpenProject(p,e);
+			OpenProject(p,e, plat);
 		};
-				
+
 		OpenWithDlg* dlg = new OpenWithDlg(this,p,editors,c);
 		dlg->show();
 	}
@@ -427,27 +474,31 @@ void MainFrameDerived::OpenProject(const long& index){
             return;
         }
     }
-#if __APPLE__
-    for (const auto& path : installPaths) {
-        if (filesystem::exists(path / executable)) {
-            // mac unlabeled version
-            auto unlabeledPath = path / executable;
-            char buffer[16];
-            auto unlabeledPathInfo = path / "Unity.app" / "Contents" / "Info.plist";
-            getCFBundleVersionFromPlist(unlabeledPathInfo.string().c_str(), buffer, sizeof(buffer));
-            if (p.version == buffer) {
-                string cmd = "\"" + unlabeledPath.string() + "\" -projectpath \"" + p.path.string() + "\"";
-                launch_process(cmd);
-                return;
-            }
-        }
-    }
-#endif
-    
 
     // prompt the user to choose a new editor because we couldn't locate one
     wxCommandEvent evt;
     MainFrameDerived::OnOpenWith(evt);
+}
+
+const char* const PlatToStr(TargetPlatform plat) {
+    switch (plat) {
+    case TargetPlatform::CurrentPlatform:
+        return "";
+    case TargetPlatform::Windows:
+        return "win64";
+    case TargetPlatform::macOS:
+        return "osxuniversal";
+    case TargetPlatform::Linux:
+        return "linux64";
+    case TargetPlatform::iOS:
+        return "ios";
+    case TargetPlatform::Android:
+        return "android";
+    case TargetPlatform::WebGL:
+        return "webgl";
+    case TargetPlatform::UWP:
+        return "windowsstoreapps";
+    }
 }
 
 /**
@@ -455,9 +506,20 @@ void MainFrameDerived::OpenProject(const long& index){
  @param p the project to open
  @param e the editor version to use when opening the project
  */
-void MainFrameDerived::OpenProject(const project& p, const editor& e){
-	string cmd = "\"" + (e.path / e.name / executable).string() + "\" -projectpath \"" + p.path.string() + "\"";
+void MainFrameDerived::OpenProject(const project& p, const editor& e, TargetPlatform plat){
+	string cmd = "\"" + e.executablePath().string() + "\" -projectpath \"" + p.path.string() + "\"";
+    if (plat != TargetPlatform::CurrentPlatform) {
+        auto str = PlatToStr(plat);
+        cmd += std::format(" -buildTarget {}", str);
+    }
 	launch_process(cmd);
+}
+
+MainFrameDerived::~MainFrameDerived()
+{
+    wxConfig config(config_name.data());
+    config.Write(config_sortCol.data(), sortColumn);
+    config.Write(config_sortAscending.data(), sortAscending);
 }
 
 /** Brings up a folder selection dialog with a prompt
@@ -502,11 +564,11 @@ project MainFrameDerived::LoadProject(const std::filesystem::path &p_as_fs){
 	}
 	
 	//get the modification date
-	string modifyDate;
+	int64_t modifyDate = std::numeric_limits<decltype(project::modifiedDate)>::min();
 	struct stat fileInfo {};
 	if (filesystem::exists(p_as_fs)) {
 		if (stat(p_as_fs.string().c_str(), &fileInfo) == 0) {
-			modifyDate = ctime(&fileInfo.st_mtime);
+            modifyDate = fileInfo.st_mtime;
 		}
 	}
 	
@@ -531,10 +593,12 @@ void MainFrameDerived::SaveProjects(){
 void MainFrameDerived::SaveEditorVersions(){
 	ofstream file;
 	file.open(datapath / editorPathsFile);
-	for (auto& p : installPaths){
-		file << p.string() << endl;
-	}
-	file.close();
+    if (file) {
+        for (auto& p : installPaths) {
+            file << p.string() << endl;
+        }
+        file.close();
+    }
 	LoadEditorVersions();
 }
 
@@ -543,51 +607,56 @@ void MainFrameDerived::SaveEditorVersions(){
  @param p the project struct to add
  @note Ensure all the fields on the struct are initialized
  */
-void MainFrameDerived::AddProject(const project& p, const std::string& filter, bool select){
+void MainFrameDerived::AddProject(const project& p, const std::string& filter, bool select, bool save){
 	//add to the vector backing the UI
     if (std::find_if(projects.begin(),projects.end(),[&](const auto& item){
         return p == item;
     }) != projects.end()){
         return;
     }
-	projects.insert(projects.begin(),p);
 	
-	//save to file
-    if (filter == ""){
-        SaveProjects();
-    }
-	
-	//add (painfully) to the UI
     auto name = p.name;
     transform(name.begin(), name.end(), name.begin(), ::tolower);
     if (name.find(filter) != std::string::npos){
+        // Get the index where we're adding the project
+        size_t projectIndex = projects.size();
+        projects.push_back(p);
+
+        //save to file
+        if (save){
+            SaveProjects();
+        }
+
+        //add to the UI
         wxListItem i;
-        i.SetId(0);
+        i.SetId(projectsList->GetItemCount());
         i.SetText(p.name);
-        
-        projectsList->InsertItem(i);
-        
-        i.SetText(p.version);
-        i.SetColumn(1);
-        projectsList->SetItem(i);
-        
-        i.SetText(p.modifiedDate);
-        
-        i.SetColumn(2);
-        projectsList->SetItem(i);
-        
-        i.SetColumn(3);
-        i.SetText(p.path.string());
-        projectsList->SetItem(i);
-        
+        long itemIndex = projectsList->InsertItem(i);
+
+        // Store the project index as item data
+        projectsList->SetItemData(itemIndex, projectIndex);
+
+        projectsList->SetItem(itemIndex, 1, p.version);
+        projectsList->SetItem(itemIndex, 2, p.modifyDateString());
+        projectsList->SetItem(itemIndex, 3, p.path.string());
+
         //resize columns
         int cols = projectsList->GetColumnCount();
-        for (int i = 0; i < cols; i++){
-            projectsList->SetColumnWidth(i, wxLIST_AUTOSIZE);
+        for (int j = 0; j < cols; j++){
+            projectsList->SetColumnWidth(j, wxLIST_AUTOSIZE_USEHEADER);
         }
-        
+
+        // Sort the list to place the new item in the correct position
+        SortProjects();
+
         if(select){
-            projectsList->SetItemState(i, wxLIST_STATE_SELECTED, wxLIST_STATE_SELECTED);
+            // Find the item after sorting
+            for (int k = 0; k < projectsList->GetItemCount(); k++) {
+                if (projectsList->GetItemData(k) == static_cast<long>(projectIndex)) {
+                    projectsList->SetItemState(k, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED);
+                    break;
+                }
+            }
         }
     }
 	
@@ -602,17 +671,13 @@ void MainFrameDerived::LoadEditorVersions(){
     wxCommandEvent e;
     OnSelectEditor(e);
 	editors.clear();
-    
-
 	
 	//iterate over the search paths
 	for (auto& path : installPaths){
-		//open the folder
-		DIR* dir = opendir(path.string().c_str());
-		if(dir != nullptr){
-			struct dirent *entry = readdir(dir);
-			//loop over the contents
-			wxArrayString a;
+        //loop over the contents
+        for(const auto& dir_entry : std::filesystem::directory_iterator{path}){
+            auto entry = dir_entry.path();
+            wxArrayString a;
             auto addInstall = [this,&a,entry](const editor& e){
                 if (std::find(editors.begin(), editors.end(), e) == editors.end()){
                     //get the target architecture
@@ -627,7 +692,7 @@ void MainFrameDerived::LoadEditorVersions(){
                         archstr += "x86_64";
                     }
                     
-                    const std::string displayName = fmt::format("{} {} - {}", e.name, archstr, e.path.string());
+                    const std::string displayName = std::format("{} {} - {}", e.name, archstr, e.path.string());
 #else
                     const std::string displayName = e.name + " - " + e.path.string();
 #endif
@@ -635,53 +700,52 @@ void MainFrameDerived::LoadEditorVersions(){
                     editors.push_back(e);
                 }
             };
-			while (entry != nullptr)
-			{
-				//is this a folder?
-				if (entry->d_type == DT_DIR){
-					//does this folder have a valid executable inside?
-					auto p = path / entry->d_name / executable;
-					if (filesystem::exists(p)){
-						//add it to the list
+            
+            //is this a folder?
+            if (dir_entry.is_directory()){
+                //does this folder have a valid executable inside?
+                
+                //add it to the list
 #if __APPLE__
-                        // the Unity Download Assistant on Mac does not allow multiple
-                        // unity versions at once, which sucks. To get the version,
-                        // we need to parse the info.plist inside of Unity.app
-                        if (strcmp(entry->d_name, ".") == 0){
-                            auto infopath = path / entry->d_name / "Unity.app" / "Contents" / "Info.plist";
-                            if (filesystem::exists(infopath)){
-                                // read the file and look for CFBundleVersion
-                                char buffer[16];
-                                getCFBundleVersionFromPlist(infopath.string().c_str(), buffer, sizeof(buffer));
-                                
-                                //add it to the backing datastructure
-                                editor e = {buffer, path};
-                                addInstall(e);
-                            }
-                        }
-                        else
+                // the Unity Download Assistant on Mac does not allow multiple
+                // unity versions at once, which sucks. To get the version,
+                // we need to parse the info.plist inside of Unity.app
+                auto infopath = entry / "Unity.app" / "Contents" / "Info.plist";
+                auto basedir = entry / "Unity.app";
+                if (!filesystem::exists(infopath)){
+                    // maybe this was a direct install
+                    infopath = entry / "Contents" / "Info.plist";
+                }
+                if (filesystem::exists(infopath) && infopath.string().find("Unity.app") != std::string::npos){
+                    // read the file and look for CFBundleVersion
+                    char buffer[16]{0};
+                    getCFBundleVersionFromPlist(infopath.string().c_str(), buffer, sizeof(buffer));
+                    
+                    //add it to the backing datastructure
+                    editor e = {buffer, basedir};
+                    addInstall(e);
+                }
+#else
+                auto p = entry / executable;
+                if (filesystem::exists(p)){
+                    //add it to the backing datastructure
+                    editor e = {entry.filename().string(), entry};
+                    addInstall(e);
+                }
 #endif
-                        {
-                            //add it to the backing datastructure
-                            editor e = {entry->d_name, path};
-                            addInstall(e);
-                        }
-					}
-				}
-				entry = readdir(dir);
-			}
-			installsList->Append(a);
-			//free resources when finished
-			closedir(dir);
-			free(entry);
-		}
+            }
+            
+            installsList->Append(a);
+        }
+        
 	}
 }
 
 void MainFrameDerived::OnOpenHub(wxCommandEvent &event){
     //
-    AddNewInstallDlg dlg(this);
-    dlg.Show();
+    //AddNewInstallDlg dlg(this);
+    //dlg.Show();
+    wxLaunchDefaultBrowser("https://unity.com/releases/editor/archive");
 }
 
 void MainFrameDerived::OnUninstall(wxCommandEvent &){
@@ -695,9 +759,101 @@ void MainFrameDerived::OnUninstall(wxCommandEvent &){
 		reveal_in_explorer(editor.path);
 #elif defined _WIN32
 		// execute the uninstaller
-		auto uninstaller_path = std::filesystem::path(editor.path) / editor.name / "Editor\\Uninstall.exe";
+		auto uninstaller_path = std::filesystem::path(editor.path) / "Editor\\Uninstall.exe";
 		ShellExecute(0, 0, uninstaller_path.c_str(), NULL, 0, SW_SHOW);
 #endif
     }
-   
+}
+
+// Handle column click for sorting
+void MainFrameDerived::OnColumnClick(wxListEvent& event) {
+    int col = event.GetColumn();
+
+    // If clicking the same column, toggle sort direction
+    if (col == sortColumn) {
+        sortAscending = !sortAscending;
+    } else {
+        sortColumn = col;
+        // For date column, default to descending (newest first)
+        // For other columns, default to ascending
+        sortAscending = (col != 2);
+    }
+
+    SortProjects();
+    // update UI 
+    const bool ascending = projectsList->GetUpdatedAscendingSortIndicator(col);
+    projectsList->ShowSortIndicator(col, ascending);
+}
+
+// Sort comparison function
+int wxCALLBACK MainFrameDerived::CompareItems(wxIntPtr item1, wxIntPtr item2, wxIntPtr sortData) {
+    MainFrameDerived* frame = reinterpret_cast<MainFrameDerived*>(sortData);
+
+    // Get the actual project indices
+    const project& p1 = frame->projects[item1];
+    const project& p2 = frame->projects[item2];
+
+    int result = 0;
+
+    constexpr static auto toLower = [](std::string data) {
+        std::transform(data.begin(), data.end(), data.begin(),
+            [](unsigned char c) { return std::tolower(c); });
+        return data;
+    };
+
+    switch (frame->sortColumn) {
+    case 0: { // Name
+            auto p1Name = toLower(p1.name);
+            auto p2Name = toLower(p2.name);
+
+            result = p1Name.compare(p2Name);
+            }
+            break;
+        case 1: { // Version
+            auto v1 = parseVersion(p1.version);
+            auto v2 = parseVersion(p2.version);
+            
+            auto v1t = std::tie(v1.major, v1.minor, v1.patch, v1.build);
+            auto v2t = std::tie(v2.major, v2.minor, v2.patch, v2.build);
+            
+            if (v1t < v2t) {
+                result = -1;
+            }
+            else if (v1t > v2t) {
+                result = 1;
+            }
+            else {
+                result = 0;
+            }
+            break;
+        }
+        case 2: // Last Modified
+            result = int(std::clamp<int64_t>(p2.modifiedDate - p1.modifiedDate,-10,10));
+            break;
+        case 3: // Path
+        {
+            auto p1path = toLower(p1.path.string());
+            auto p2path = toLower(p2.path.string());
+
+            result = p1path.compare(p2path);
+        }
+            break;
+    }
+
+    // If items are equal on primary sort, sort by name
+    if (result == 0 && frame->sortColumn != 0) {
+        result = p1.name.compare(p2.name);
+    }
+
+    // Apply sort direction
+    if (!frame->sortAscending) {
+        result = -result;
+    }
+
+    return result;
+}
+
+// Sort the project list
+void MainFrameDerived::SortProjects() {
+    projectsList->SortItems(CompareItems, reinterpret_cast<wxIntPtr>(this));
 }
