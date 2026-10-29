@@ -12,11 +12,6 @@
 #include <wx/dirdlg.h>
 #include <wx/aboutdlg.h>
 #include <wx/config.h>
-#if defined _WIN32
-#include "dirent.h" 
-#else
-#include <dirent.h>
-#endif
 
 #include <format>
 
@@ -85,13 +80,13 @@ wxEND_EVENT_TABLE()
 //call superclass constructor
 MainFrameDerived::MainFrameDerived() : MainFrame(NULL){
     // set saved position and size
-    wxConfig *config = new wxConfig(CONFIG_NAME);
+    wxConfig *windowConfig = new wxConfig(CONFIG_NAME);
     int width, height, x, y;
-    if (config->Read(SETTING_WIDTH, &width) && config->Read(SETTING_HEIGHT, &height) &&
-        config->Read(SETTING_POSITION_X, &x) && config->Read(SETTING_POSITION_Y, &y)) {
+    if (windowConfig->Read(SETTING_WIDTH, &width) && windowConfig->Read(SETTING_HEIGHT, &height) &&
+        windowConfig->Read(SETTING_POSITION_X, &x) && windowConfig->Read(SETTING_POSITION_Y, &y)) {
         this->SetSize(x, y, width, height);
     }
-    delete config;
+    delete windowConfig;
 
     // load prefs
     wxConfig config(config_name.data());
@@ -189,11 +184,6 @@ void MainFrameDerived::OnSelectEditorPath(wxCommandEvent&){
             ptr->Disable();
         }
     }
-}
-
-void MainFrameDerived::OnQuit(wxCommandEvent&)
-{
-    Close();
 }
 
 /**
