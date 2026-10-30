@@ -48,6 +48,8 @@ EVT_MENU(wxID_UNINDENT, MainFrameDerived::OnSource)
 EVT_MENU(wxID_TOP, MainFrameDerived::OnUpdate)
 EVT_MENU(wxID_EXIT, MainFrameDerived::OnQuit)
 EVT_CLOSE(MainFrameDerived::OnClose)
+EVT_SIZE(MainFrameDerived::OnSize)
+EVT_MOVE(MainFrameDerived::OnMove)
 EVT_BUTTON(wxID_ADD,MainFrameDerived::OnAddProject)
 EVT_BUTTON(wxID_NEW,MainFrameDerived::OnCreateProject)
 EVT_BUTTON(wxID_FIND,MainFrameDerived::OnLocateInstall)
@@ -88,6 +90,7 @@ MainFrameDerived::MainFrameDerived() : MainFrame(NULL){
         config.Read(config_windowX.data(), &x) && config.Read(config_windowY.data(), &y)) {
         this->SetSize(x, y, width, height);
     }
+    windowRect = this->GetRect();
 
     sortColumn = std::clamp<long>(config.ReadLong(config_sortCol.data(), 0), 0, 3);
     sortAscending = config.ReadBool(config_sortAscending.data(), false);
@@ -131,20 +134,34 @@ void MainFrameDerived::OnQuit(wxCommandEvent&){
 }
 
 void MainFrameDerived::OnClose(wxCloseEvent& event){
-    // save window size and position, unless minimized (its geometry is not meaningful then)
-    if (!this->IsIconized()) {
-        wxConfig config(config_name.data());
-        int width, height, x, y;
-        this->GetSize(&width, &height);
-        this->GetPosition(&x, &y);
-        config.Write(config_windowWidth.data(), width);
-        config.Write(config_windowHeight.data(), height);
-        config.Write(config_windowX.data(), x);
-        config.Write(config_windowY.data(), y);
-    }
+    // save the last window size and position from before it was minimized (if it is)
+    wxConfig config(config_name.data());
+    config.Write(config_windowWidth.data(), windowRect.width);
+    config.Write(config_windowHeight.data(), windowRect.height);
+    config.Write(config_windowX.data(), windowRect.x);
+    config.Write(config_windowY.data(), windowRect.y);
 
     // let the default handler destroy the window
     event.Skip();
+}
+
+void MainFrameDerived::OnSize(wxSizeEvent& event){
+    RememberWindowRect();
+    event.Skip();
+}
+
+void MainFrameDerived::OnMove(wxMoveEvent& event){
+    RememberWindowRect();
+    event.Skip();
+}
+
+/**
+ Stores the current window geometry, unless the window is minimized (its geometry is not meaningful then)
+ */
+void MainFrameDerived::RememberWindowRect(){
+    if (!this->IsIconized()) {
+        windowRect = this->GetRect();
+    }
 }
 
 void MainFrameDerived::OnSelectProject(wxListEvent&){

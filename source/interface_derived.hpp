@@ -62,6 +62,9 @@ private:
 
 	void OnQuit(wxCommandEvent&);
 	void OnClose(wxCloseEvent&);
+	void OnSize(wxSizeEvent&);
+	void OnMove(wxMoveEvent&);
+	void RememberWindowRect();
     
     wxWindow* const projectActionItems[3]{
         revealProjBtn,
@@ -93,6 +96,9 @@ private:
 	// Sorting state
 	int sortColumn = 0;  // Default sort by name (column 0)
 	bool sortAscending = true;  // Default ascending
+
+	// Last window geometry while not minimized, saved on close
+	wxRect windowRect;
 	
 	//window events
 	void OnAbout(wxCommandEvent& event);
