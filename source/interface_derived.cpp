@@ -24,17 +24,16 @@ using namespace std::filesystem;
 
 #define LEARN_TAB 2
 #define WEBVIEW 2000
-#define CONFIG_NAME "com.nativeunityhub.config"
-#define SETTING_WIDTH "W_WIDTH"
-#define SETTING_HEIGHT "W_HEIGHT"
-#define SETTING_POSITION_X "POSITION_X"
-#define SETTING_POSITION_Y "POSITION_Y"
 //the web view unloads after 5 minutes of page hidden
 const int TIMER_LENGTH = 5 * 1000 * 60;
 
 constexpr std::string_view config_name = "com.ravbug.unityhubnative.config";
 constexpr std::string_view config_sortCol = "sortColIndex";
 constexpr std::string_view config_sortAscending = "sortAscending";
+constexpr std::string_view config_windowWidth = "windowWidth";
+constexpr std::string_view config_windowHeight = "windowHeight";
+constexpr std::string_view config_windowX = "windowX";
+constexpr std::string_view config_windowY = "windowY";
 
 //Declare events here
 wxBEGIN_EVENT_TABLE(MainFrameDerived, wxFrame)
@@ -80,17 +79,16 @@ wxEND_EVENT_TABLE()
 
 //call superclass constructor
 MainFrameDerived::MainFrameDerived() : MainFrame(NULL){
-    // set saved position and size
-    wxConfig *windowConfig = new wxConfig(CONFIG_NAME);
-    int width, height, x, y;
-    if (windowConfig->Read(SETTING_WIDTH, &width) && windowConfig->Read(SETTING_HEIGHT, &height) &&
-        windowConfig->Read(SETTING_POSITION_X, &x) && windowConfig->Read(SETTING_POSITION_Y, &y)) {
-        this->SetSize(x, y, width, height);
-    }
-    delete windowConfig;
-
     // load prefs
     wxConfig config(config_name.data());
+
+    // set saved position and size
+    int width, height, x, y;
+    if (config.Read(config_windowWidth.data(), &width) && config.Read(config_windowHeight.data(), &height) &&
+        config.Read(config_windowX.data(), &x) && config.Read(config_windowY.data(), &y)) {
+        this->SetSize(x, y, width, height);
+    }
+
     sortColumn = std::clamp<long>(config.ReadLong(config_sortCol.data(), 0), 0, 3);
     sortAscending = config.ReadBool(config_sortAscending.data(), false);
 
@@ -134,15 +132,14 @@ void MainFrameDerived::OnQuit(wxCommandEvent&){
 
 void MainFrameDerived::OnClose(wxCloseEvent& event){
     // save window size and position
-    wxConfig *config = new wxConfig(CONFIG_NAME);
+    wxConfig config(config_name.data());
     int width, height, x, y;
     this->GetSize(&width, &height);
     this->GetPosition(&x, &y);
-    config->Write(SETTING_WIDTH, width);
-    config->Write(SETTING_HEIGHT, height);
-    config->Write(SETTING_POSITION_X, x);
-    config->Write(SETTING_POSITION_Y, y);
-    delete config;
+    config.Write(config_windowWidth.data(), width);
+    config.Write(config_windowHeight.data(), height);
+    config.Write(config_windowX.data(), x);
+    config.Write(config_windowY.data(), y);
 
     // let the default handler destroy the window
     event.Skip();
