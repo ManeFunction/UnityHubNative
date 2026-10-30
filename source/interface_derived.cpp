@@ -48,6 +48,7 @@ EVT_MENU(wxID_REFRESH, MainFrameDerived::OnReloadData)
 EVT_MENU(wxID_UNINDENT, MainFrameDerived::OnSource)
 EVT_MENU(wxID_TOP, MainFrameDerived::OnUpdate)
 EVT_MENU(wxID_EXIT, MainFrameDerived::OnQuit)
+EVT_CLOSE(MainFrameDerived::OnClose)
 EVT_BUTTON(wxID_ADD,MainFrameDerived::OnAddProject)
 EVT_BUTTON(wxID_NEW,MainFrameDerived::OnCreateProject)
 EVT_BUTTON(wxID_FIND,MainFrameDerived::OnLocateInstall)
@@ -128,6 +129,10 @@ MainFrameDerived::MainFrameDerived() : MainFrame(NULL){
 }
 
 void MainFrameDerived::OnQuit(wxCommandEvent&){
+    Close();
+}
+
+void MainFrameDerived::OnClose(wxCloseEvent& event){
     // save window size and position
     wxConfig *config = new wxConfig(CONFIG_NAME);
     int width, height, x, y;
@@ -139,7 +144,8 @@ void MainFrameDerived::OnQuit(wxCommandEvent&){
     config->Write(SETTING_POSITION_Y, y);
     delete config;
 
-    Close();
+    // let the default handler destroy the window
+    event.Skip();
 }
 
 void MainFrameDerived::OnSelectProject(wxListEvent&){

@@ -61,6 +61,7 @@ private:
     void OnSelectEditorPath(wxCommandEvent&);
 
 	void OnQuit(wxCommandEvent&);
+	void OnClose(wxCloseEvent&);
     
     wxWindow* const projectActionItems[3]{
         revealProjBtn,
