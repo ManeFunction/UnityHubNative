@@ -131,15 +131,17 @@ void MainFrameDerived::OnQuit(wxCommandEvent&){
 }
 
 void MainFrameDerived::OnClose(wxCloseEvent& event){
-    // save window size and position
-    wxConfig config(config_name.data());
-    int width, height, x, y;
-    this->GetSize(&width, &height);
-    this->GetPosition(&x, &y);
-    config.Write(config_windowWidth.data(), width);
-    config.Write(config_windowHeight.data(), height);
-    config.Write(config_windowX.data(), x);
-    config.Write(config_windowY.data(), y);
+    // save window size and position, unless minimized (its geometry is not meaningful then)
+    if (!this->IsIconized()) {
+        wxConfig config(config_name.data());
+        int width, height, x, y;
+        this->GetSize(&width, &height);
+        this->GetPosition(&x, &y);
+        config.Write(config_windowWidth.data(), width);
+        config.Write(config_windowHeight.data(), height);
+        config.Write(config_windowX.data(), x);
+        config.Write(config_windowY.data(), y);
+    }
 
     // let the default handler destroy the window
     event.Skip();
