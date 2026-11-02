@@ -65,6 +65,14 @@ private:
 	void OnSize(wxSizeEvent&);
 	void OnMove(wxMoveEvent&);
 	void RememberWindowRect();
+
+    // Unity CLI: opens projects signed in without the official Hub
+    void OnInstallCli(wxCommandEvent&);
+    void OnLoginCli(wxCommandEvent&);
+    void InstallCli();
+    void LoginCli();
+    void OfferCliInstall();
+    void RefreshCliState();
     
     wxWindow* const projectActionItems[3]{
         revealProjBtn,
@@ -191,6 +199,7 @@ private:
     void OnOpenHub(wxCommandEvent& event);
 	void OnReloadEditors(wxCommandEvent& event){
 		this->LoadEditorVersions();
+		RefreshCliState();
 	}
 	void OnColumnClick(wxListEvent& event);
 	void OnColumnResized(wxListEvent& event);
