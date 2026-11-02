@@ -61,6 +61,10 @@ private:
     void OnSelectEditorPath(wxCommandEvent&);
 
 	void OnQuit(wxCommandEvent&);
+	void OnClose(wxCloseEvent&);
+	void OnSize(wxSizeEvent&);
+	void OnMove(wxMoveEvent&);
+	void RememberWindowRect();
     
     wxWindow* const projectActionItems[3]{
         revealProjBtn,
@@ -92,6 +96,11 @@ private:
 	// Sorting state
 	int sortColumn = 0;  // Default sort by name (column 0)
 	bool sortAscending = true;  // Default ascending
+	// Set once the user resizes a column; disables autosizing and persists the widths
+	bool customColumnWidths = false;
+
+	// Last window geometry while not minimized, saved on close
+	wxRect windowRect;
 	
 	//window events
 	void OnAbout(wxCommandEvent& event);
@@ -177,6 +186,7 @@ private:
 		this->LoadEditorVersions();
 	}
 	void OnColumnClick(wxListEvent& event);
+	void OnColumnResized(wxListEvent& event);
 	static int wxCALLBACK CompareItems(wxIntPtr item1, wxIntPtr item2, wxIntPtr sortData);
 	void SortProjects();
 	wxDECLARE_EVENT_TABLE();
