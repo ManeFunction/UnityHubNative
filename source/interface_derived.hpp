@@ -73,6 +73,8 @@ private:
     void LoginCli();
     void OfferCliInstall();
     void RefreshCliState();
+	void OnCenterOnDisplay(wxCommandEvent&);
+	void KeepOnScreen();
     
     wxWindow* const projectActionItems[3]{
         revealProjBtn,

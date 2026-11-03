@@ -15,8 +15,10 @@
 #include <wx/config.h>
 #include <wx/richmsgdlg.h>
 #include <wx/weakref.h>
+#include <wx/display.h>
 
 #include <format>
+#include <limits>
 
 #include <filesystem>
 #if __APPLE__
@@ -40,6 +42,9 @@ constexpr std::string_view config_windowY = "windowY";
 constexpr std::string_view config_columnWidth = "projectColumnWidth";
 constexpr std::string_view config_hideCliPrompt = "hideUnityCliPrompt";
 
+// menu command ids that have no fitting stock id
+constexpr int ID_CENTER_ON_DISPLAY = wxID_HIGHEST + 1;
+
 //Declare events here
 wxBEGIN_EVENT_TABLE(MainFrameDerived, wxFrame)
 EVT_MENU(wxID_ABOUT, MainFrameDerived::OnAbout)
@@ -52,6 +57,7 @@ EVT_MENU(wxID_REFRESH, MainFrameDerived::OnReloadData)
 EVT_MENU(wxID_UNINDENT, MainFrameDerived::OnSource)
 EVT_MENU(wxID_TOP, MainFrameDerived::OnUpdate)
 EVT_MENU(wxID_EXIT, MainFrameDerived::OnQuit)
+EVT_MENU(ID_CENTER_ON_DISPLAY, MainFrameDerived::OnCenterOnDisplay)
 EVT_CLOSE(MainFrameDerived::OnClose)
 EVT_SIZE(MainFrameDerived::OnSize)
 EVT_MOVE(MainFrameDerived::OnMove)
@@ -134,12 +140,22 @@ MainFrameDerived::MainFrameDerived() : MainFrame(NULL){
 		menuReveal->SetItemLabel("Reveal In File Explorer\tCtrl-F");
 	#endif
 
+	// recovery command for a window that ended up off screen (e.g. its saved display was disconnected).
+	// Added here rather than in the generated base class so regenerating interface.cpp does not drop it.
+	// The shortcut matters on Windows and Linux: the menu bar is part of the window there, so when the
+	// window is off screen the menu is unreachable, but the shortcut still works once the window is focused
+	if (const int windowMenuIndex = menubar->FindMenu("Window"); windowMenuIndex != wxNOT_FOUND) {
+		menubar->GetMenu(windowMenuIndex)->Insert(1, ID_CENTER_ON_DISPLAY, "Center Window on Current Display\tCtrl-Shift-M");
+	}
+
 	// set saved position and size. This must come after dpi_scale(), which calls Fit() on Windows
 	// and would otherwise shrink the window back to its default size
 	int width, height, x, y;
 	if (config.Read(config_windowWidth.data(), &width) && config.Read(config_windowHeight.data(), &height) &&
 		config.Read(config_windowX.data(), &x) && config.Read(config_windowY.data(), &y)) {
 		this->SetSize(x, y, width, height);
+		// the saved geometry may no longer fit the displays, e.g. its monitor was disconnected or the layout changed
+		KeepOnScreen();
 	}
 	windowRect = this->GetRect();
 
@@ -219,6 +235,93 @@ void MainFrameDerived::OnSize(wxSizeEvent& event){
 void MainFrameDerived::OnMove(wxMoveEvent& event){
     RememberWindowRect();
     event.Skip();
+}
+
+/**
+ Shrinks the rect to fit into the area if it is larger, then moves it the shortest distance that puts it fully inside
+ */
+static wxRect FitInto(wxRect rect, const wxRect& area){
+    rect.width = std::min(rect.width, area.width);
+    rect.height = std::min(rect.height, area.height);
+    rect.x = std::clamp(rect.x, area.x, area.x + area.width - rect.width);
+    rect.y = std::clamp(rect.y, area.y, area.y + area.height - rect.height);
+    return rect;
+}
+
+static long long AreaOf(const wxRect& rect){
+    return rect.IsEmpty() ? 0 : static_cast<long long>(rect.width) * rect.height;
+}
+
+/**
+ Moves the window to the center of the display the user is working on (the one under the mouse pointer),
+ shrinking it to fit if needed. Recovers a window that is off screen or on a display that is gone
+ */
+void MainFrameDerived::OnCenterOnDisplay(wxCommandEvent&){
+    int displayIndex = wxDisplay::GetFromPoint(wxGetMousePosition());
+    if (displayIndex == wxNOT_FOUND) {
+        displayIndex = 0;   // the primary display
+    }
+    // the client area excludes the taskbar, the Dock and the macOS menu bar
+    const wxRect area = wxDisplay(static_cast<unsigned>(displayIndex)).GetClientArea();
+
+    // leave the states whose geometry is managed by the OS, so the window can be moved
+    if (IsFullScreen()) {
+        ShowFullScreen(false);
+    }
+    if (IsIconized()) {
+        Iconize(false);
+    }
+    if (IsMaximized()) {
+        Maximize(false);
+    }
+
+    SetSize(FitInto(GetRect(), area).CenterIn(area));
+    Raise();
+}
+
+/**
+ If part of the window is outside every display, snaps it back to the nearest edge of the display it overlaps the most
+ (or the closest display, if it overlaps none), shrinking it if it does not fit there.
+ A window spanning several displays is left alone as long as all of it is visible
+ */
+void MainFrameDerived::KeepOnScreen(){
+    const unsigned displayCount = wxDisplay::GetCount();
+    if (displayCount == 0) {
+        return;
+    }
+    const wxRect rect = GetRect();
+
+    // The client areas exclude the taskbar, the Dock and the macOS menu bar, and do not overlap each other, so the
+    // window is fully visible exactly when their overlaps with it add up to its whole area. The visibility test
+    // ignores a margin around the window: on Windows 10/11 GetRect() includes the invisible resize borders, so a
+    // window snapped to a screen edge sticks out by a few pixels and must not be treated as off screen
+    // (const matters: the non-const wxRect::Intersect() overload intersects in place instead of returning a copy)
+    const wxRect deflated = wxRect(rect).Deflate(FromDIP(16));
+    const wxRect tested = deflated.IsEmpty() ? rect : deflated;
+
+    long long visibleArea = 0;
+    long long bestOverlap = 0;
+    long long bestDistance = std::numeric_limits<long long>::max();
+    wxRect target;
+    for (unsigned i = 0; i < displayCount; i++){
+        const wxRect area = wxDisplay(i).GetClientArea();
+        visibleArea += AreaOf(tested.Intersect(area));
+
+        // prefer the display holding most of the window; failing that, the one with the closest edge
+        const long long overlap = AreaOf(rect.Intersect(area));
+        const long long dx = std::max({0, area.x - rect.GetRight(), rect.x - area.GetRight()});
+        const long long dy = std::max({0, area.y - rect.GetBottom(), rect.y - area.GetBottom()});
+        const long long distance = dx * dx + dy * dy;
+        if (overlap > bestOverlap || (bestOverlap == 0 && overlap == 0 && distance < bestDistance)) {
+            bestOverlap = overlap;
+            bestDistance = distance;
+            target = area;
+        }
+    }
+
+    if (visibleArea < AreaOf(tested)) {
+        SetSize(FitInto(rect, target));
+    }
 }
 
 /**
